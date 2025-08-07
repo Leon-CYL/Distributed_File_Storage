@@ -1,11 +1,12 @@
 package p2p
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"sync"
 )
+
+// TCP Peer Inplementation
 
 // TCPPeer represents a remote node over TCP stablished connection.
 type TCPPeer struct {
@@ -23,27 +24,43 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
+func (tp *TCPPeer) Close() error {
+	return tp.conn.Close()
+}
+
+// TCP Transport Inplementation
+type TCPTransportOpts struct {
+	ListenAddr    string
+	HandshakeFunc HandshakeFunc
+	Decoder       Decoder
+	OnPeer        func(Peer) error
+}
+
 type TCPTransport struct {
-	listenAddr    string
-	listener      net.Listener
-	shakeHands HandshakeFunc
-	decoder       Decoder
+	listener net.Listener
+	TCPTransportOpts
+	rpcCh chan RPC
 
 	mu    sync.RWMutex
 	peers map[net.Addr]Peer
 }
 
-func NewTCPTransport(listenAddr string) *TCPTransport {
+func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
-		shakeHands: NOPHandshake,
-		listenAddr:    listenAddr,
+		TCPTransportOpts: opts,
+		rpcCh:            make(chan RPC),
 	}
+}
+
+// We can only read from the channel, not write to it.
+func (t *TCPTransport) Consume() <-chan RPC {
+	return t.rpcCh
 }
 
 func (t *TCPTransport) AcceptAndListen() error {
 	var err error
 
-	t.listener, err = net.Listen("tcp", t.listenAddr)
+	t.listener, err = net.Listen("tcp", t.ListenAddr)
 
 	if err != nil {
 		return err
@@ -66,23 +83,38 @@ func (t *TCPTransport) startAcceptLoop() error {
 	}
 }
 
-type temp struct {}
-
 func (t *TCPTransport) handleConn(conn net.Conn) {
+	var err error
 
-	peer := NewTCPPeer(conn, false)
+	peer := NewTCPPeer(conn, true)
 
-	if err := t.shakeHands(conn); err != nil {
-		//
+	defer func() {
+		fmt.Printf("Dropping peer connection: %s\n", err)
+		conn.Close()
+	}()
+
+	if err = t.HandshakeFunc(peer); err != nil {
+		return
 	}
 
-	msg := temp{}
+	if t.OnPeer != nil {
+		if err = t.OnPeer(peer); err != nil {
+			return
+		}
+	}
+
+	rpc := RPC{}
 	// Read loop
 	for {
-		if err := t.decoder.Decode(conn, &msg); err != nil {
-			fmt.Printf("TCP Transport Error: %s\n", err)
-			continue
+		err = t.Decoder.Decode(conn, &rpc)
+
+		if err != nil {
+			return
 		}
+
+		rpc.From = conn.RemoteAddr()
+
+		t.rpcCh <- rpc
 
 	}
 
