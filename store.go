@@ -87,14 +87,15 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
+func (s *Store) Clear() error {
+	return os.RemoveAll(s.Root)
+}
+
 func (s *Store) Has(key string) bool {
 	pathkey := s.PathTransformFunc(key)
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
 	_, err := os.Stat(fullPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return false
-	}
-	return true
+	return !errors.Is(err, fs.ErrNotExist)
 }
 
 func (s *Store) Delete(key string) error {
@@ -123,6 +124,10 @@ func (s *Store) ReadStream(key string) (io.ReadCloser, error) {
 	pathkey := s.PathTransformFunc(key)
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
 	return os.Open(fullPath)
+}
+
+func (s *Store) Write(key string, r io.Reader) error {
+	return s.WriteStream(key, r)
 }
 
 func (s *Store) WriteStream(key string, r io.Reader) error {
