@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
@@ -107,49 +106,49 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(deletePath)
 }
 
-func (s *Store) Read(key string) (io.Reader, error) {
-	f, err := s.ReadStream(key)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, f)
-
-	return buf, err
+func (s *Store) Read(key string) (int64, io.Reader, error) {
+	return s.readStream(key)
 }
 
-func (s *Store) ReadStream(key string) (io.ReadCloser, error) {
+func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	pathkey := s.PathTransformFunc(key)
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
-	return os.Open(fullPath)
+	file, err := os.Open(fullPath)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	fi, err := file.Stat()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return fi.Size(), file, nil
 }
 
-func (s *Store) Write(key string, r io.Reader) error {
-	return s.WriteStream(key, r)
+func (s *Store) Write(key string, r io.Reader) (int64, error) {
+	return s.writeStream(key, r)
 }
 
-func (s *Store) WriteStream(key string, r io.Reader) error {
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	pathkey := s.PathTransformFunc(key)
 	root := fmt.Sprintf("%s/%s", s.Root, pathkey.PathName)
 	if err := os.MkdirAll(root, os.ModePerm); err != nil {
-		return err
+		return 0, err
 	}
 
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
 
 	f, err := os.Create(fullPath)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
 
 	n, err := io.Copy(f, r)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	log.Printf("Wrote (%d) bytes to disk: %s", n, fullPath)
-	return nil
+	return n, nil
 }

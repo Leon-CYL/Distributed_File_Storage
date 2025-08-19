@@ -45,7 +45,7 @@ func TestStore(t *testing.T) {
 		key := fmt.Sprintf("myspecialkey-%d", i)
 		data := []byte("Hello, World!")
 
-		if err := store.WriteStream(key, bytes.NewReader(data)); err != nil {
+		if _, err := store.Write(key, bytes.NewReader(data)); err != nil {
 			t.Error(err)
 		}
 
@@ -53,7 +53,7 @@ func TestStore(t *testing.T) {
 			t.Errorf("Expected to have key: %s", key)
 		}
 
-		r, err := store.Read(key)
+		_, r, err := store.Read(key)
 		if err != nil {
 			t.Error(err)
 		}
