@@ -129,12 +129,12 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 
 	mw := io.MultiWriter(peers...)
 	mw.Write([]byte{p2p.IncomingStream})
-	n, err := copyEncrypt(fs.EncryptionKey, fileBuf, mw)
+	_, err = copyEncrypt(fs.EncryptionKey, fileBuf, mw)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("[%s] Receive and Written (%d) bytes to peer\n", fs.Transport.Addr(), n)
+	// fmt.Printf("[%s] Receive and Written (%d) bytes to peer\n", fs.Transport.Addr(), n)
 
 	return nil
 }
