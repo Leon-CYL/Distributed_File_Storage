@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,7 @@ func newServer(listenAddr string, nodes ...string) *FileServer {
 	tcp := p2p.NewTCPTransport(tcpTransportOpts)
 
 	fileServerOpts := FileServerOpts{
+		EncryptionKey:     newEncryptionKey(),
 		StorageRoot:       listenAddr + "_network",
 		PathTransformFunc: CASPathTransformFunc,
 		Transport:         tcp,
@@ -33,31 +35,48 @@ func newServer(listenAddr string, nodes ...string) *FileServer {
 }
 
 func main() {
-	s1 := newServer(":3000", "")
-	s2 := newServer(":4000", ":3000")
+	s1 := newServer(":3001", "")
+	s2 := newServer(":3002", "")
+	s3 := newServer(":3000", ":3001", ":3002")
 
 	go func() {
 		log.Fatal(s1.Start())
 	}()
 
-	time.Sleep(time.Second * 1)
-	go s2.Start()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Millisecond * 500)
 
-	// data := bytes.NewReader([]byte("my big data file here!"))
-	// s2.Store("text.txt", data)
-	// time.Sleep(time.Microsecond * 5)
+	go func() {
+		log.Fatal(s2.Start())
+	}()
 
-	r, err := s2.Get("text.txt")
-	if err != nil {
-		log.Fatal(err)
+	time.Sleep(time.Millisecond * 500)
+
+	go func() {
+		log.Fatal(s3.Start())
+	}()
+
+	time.Sleep(time.Millisecond * 500)
+
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("text_%d.txt", i)
+		data := bytes.NewReader([]byte("my big data file here!"))
+		s3.Store(key, data)
+
+		time.Sleep(time.Millisecond * 5)
+
+		if err := s3.store.Delete(key); err != nil {
+			log.Fatal(err)
+		}
+
+		r, err := s3.Get(key)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = io.ReadAll(r)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-
-	b, err := io.ReadAll(r)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(b))
 
 }

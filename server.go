@@ -14,6 +14,7 @@ import (
 )
 
 type FileServerOpts struct {
+	EncryptionKey     []byte
 	ListenAddr        string
 	StorageRoot       string
 	PathTransformFunc PathTransformFunc
@@ -67,7 +68,7 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := Message{
 		Payload: MessageGetFile{
-			Key: key,
+			Key: hashKey(key),
 		},
 	}
 
@@ -83,12 +84,12 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 		binary.Read(peer, binary.LittleEndian, &fileSize)
 
 		// Then read the file from the peer
-		n, err := fs.store.Write(key, io.LimitReader(peer, fileSize))
+		n, err := fs.store.WriteDecrypt(fs.EncryptionKey, key, io.LimitReader(peer, fileSize))
 		if err != nil {
 			return nil, err
 		}
 
-		fmt.Printf("[%s] received (%d) bytes over network from [%s]: \n",fs.Transport.Addr(), n, peer.RemoteAddr())
+		fmt.Printf("[%s] received (%d) bytes over network from [%s]: \n", fs.Transport.Addr(), n, peer.RemoteAddr())
 
 		peer.CloseStream()
 
@@ -110,8 +111,8 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 
 	msg := Message{
 		Payload: MessageStoreFile{
-			Key:  key,
-			Size: size,
+			Key:  hashKey(key),
+			Size: size + 16,
 		},
 	}
 	if err := fs.broadcast(&msg); err != nil {
@@ -120,27 +121,31 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 
 	time.Sleep(time.Millisecond * 5)
 
+	peers := []io.Writer{}
+
 	for _, peer := range fs.peers {
-		peer.Send([]byte{p2p.IncomingStream})
-		n, err := io.Copy(peer, fileBuf)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Receive and Written %d bytes to peer\n", n)
+		peers = append(peers, peer)
 	}
+
+	mw := io.MultiWriter(peers...)
+	mw.Write([]byte{p2p.IncomingStream})
+	n, err := copyEncrypt(fs.EncryptionKey, fileBuf, mw)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("[%s] Receive and Written (%d) bytes to peer\n", fs.Transport.Addr(), n)
 
 	return nil
 }
 
 func (fs *FileServer) Start() error {
+	fmt.Printf("Starting file server[%s]...\n", fs.Transport.Addr())
 	if err := fs.Transport.AcceptAndListen(); err != nil {
 		return err
 	}
 
-	if len(fs.BootstrapNodes) > 0 {
-		fs.bootstrapNetwork()
-	}
-
+	fs.bootstrapNetwork()
 	fs.loop()
 
 	return nil
@@ -250,14 +255,13 @@ func (fs *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) 
 }
 
 func (fs *FileServer) bootstrapNetwork() error {
-
 	for _, addr := range fs.BootstrapNodes {
 		if len(addr) == 0 {
 			continue
 		}
 
-		fmt.Println("Attemping to connect to node: ", addr)
 		go func(addr string) {
+			fmt.Printf("[%s] attemping to connect with remote node: %s\n", fs.Transport.Addr(), addr)
 			if err := fs.Transport.Dial(addr); err != nil {
 				log.Printf("Error dialing bootstrap node: %s\n", err)
 			}
@@ -265,16 +269,6 @@ func (fs *FileServer) bootstrapNetwork() error {
 	}
 
 	return nil
-}
-
-func (fs *FileServer) stream(msg *Message) error {
-	peers := []io.Writer{}
-
-	for _, peer := range fs.peers {
-		peers = append(peers, peer)
-	}
-	mw := io.MultiWriter(peers...)
-	return gob.NewEncoder(io.MultiWriter(mw)).Encode(msg)
 }
 
 func (fs *FileServer) broadcast(msg *Message) error {
