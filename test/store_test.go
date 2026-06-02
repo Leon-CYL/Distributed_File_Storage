@@ -1,21 +1,23 @@
-package main
+package test
 
 import (
 	"bytes"
 	"fmt"
 	"io"
 	"testing"
+
+	"github.com/Leon-CYL/Distributed_File_Storage/store"
 )
 
-func newStore() *Store {
-	opts := StoreOpts{
-		PathTransformFunc: CASPathTransformFunc,
+func newStore() *store.Store {
+	opts := store.StoreOpts{
+		PathTransformFunc: store.CASPathTransformFunc,
 	}
 
-	return NewStore(opts)
+	return store.NewStore(opts)
 }
 
-func teardown(s *Store, t *testing.T) {
+func teardown(s *store.Store, t *testing.T) {
 	if err := s.Clear(); err != nil {
 		t.Error(err)
 	}
@@ -23,7 +25,7 @@ func teardown(s *Store, t *testing.T) {
 
 func TestPathTransformFunc(t *testing.T) {
 	key := "somekey"
-	pathkey := CASPathTransformFunc(key)
+	pathkey := store.CASPathTransformFunc(key)
 	expectedPathname := "f16b0/9e156/438c4/62053/0809f/c44c5/502a5/378da"
 	expectedFilename := "f16b09e156438c4620530809fc44c5502a5378da"
 

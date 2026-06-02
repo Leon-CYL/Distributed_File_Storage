@@ -10,21 +10,21 @@ import (
 )
 
 // newEncryptionKey creates a new random 32-byte encryption key for AES-256.
-func newEncryptionKey() []byte {
+func NewEncryptionKey() []byte {
 	keyBuf := make([]byte, 32)
 	io.ReadFull(rand.Reader, keyBuf)
 	return keyBuf
 }
 
 // hashKey hashes a string key using MD5 and returns the hash as a hex string.
-func hashKey(key string) string {
+func HashKey(key string) string {
 	hash := md5.Sum([]byte(key))
 	return hex.EncodeToString(hash[:])
 }
 
 // copyStream reads data from src, encrypts/decrypts it using the stream,
 // writes the result to dst, and returns the total number of bytes written.
-func copyStream(stream cipher.Stream, blockSize int, src io.Reader, dst io.Writer) (int, error) {
+func CopyStream(stream cipher.Stream, blockSize int, src io.Reader, dst io.Writer) (int, error) {
 	buf := make([]byte, 32*1024)
 	nw := blockSize
 
@@ -53,7 +53,7 @@ func copyStream(stream cipher.Stream, blockSize int, src io.Reader, dst io.Write
 
 // copyDecrypt reads the IV from src, creates an AES-CTR decrypt stream,
 // decrypts the remaining data, and writes the plaintext to dst.
-func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
+func CopyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return 0, err
@@ -65,12 +65,12 @@ func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	return copyStream(stream, block.BlockSize(), src, dst)
+	return CopyStream(stream, block.BlockSize(), src, dst)
 }
 
 // copyEncrypt creates a random IV, writes it to dst first,
 // then encrypts data from src using AES-CTR and writes the ciphertext to dst.
-func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
+func CopyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return 0, err
@@ -86,5 +86,5 @@ func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	return copyStream(stream, block.BlockSize(), src, dst)
+	return CopyStream(stream, block.BlockSize(), src, dst)
 }

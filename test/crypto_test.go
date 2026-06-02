@@ -1,24 +1,25 @@
-package main
+package test
 
 import (
 	"bytes"
 	"testing"
-	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
+
+	crypto "github.com/Leon-CYL/Distributed_File_Storage/crypto"
 )
 
 func TestCopyEncryptDecrypt(t *testing.T) {
 	payload := "foo not bar"
 	src := bytes.NewReader([]byte(payload))
 	dst := new(bytes.Buffer)
-	key := newEncryptionKey()
+	key := crypto.NewEncryptionKey()
 
-	_, err := copyEncrypt(key, src, dst)
+	_, err := crypto.CopyEncrypt(key, src, dst)
 	if err != nil {
 		t.Error(err)
 	}
 
 	out := new(bytes.Buffer)
-	nw, err := copyDecrypt(key, dst, out)
+	nw, err := crypto.CopyDecrypt(key, dst, out)
 	if err != nil {
 		t.Error(err)
 	}

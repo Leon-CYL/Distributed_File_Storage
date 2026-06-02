@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -10,14 +10,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
 	"github.com/Leon-CYL/Distributed_File_Storage/p2p"
+	"github.com/Leon-CYL/Distributed_File_Storage/store"
 )
 
 type FileServerOpts struct {
 	EncryptionKey     []byte
 	ListenAddr        string
 	StorageRoot       string
-	PathTransformFunc PathTransformFunc
+	PathTransformFunc store.PathTransformFunc
 	Transport         p2p.Transport
 	BootstrapNodes    []string
 }
@@ -27,19 +29,19 @@ type FileServer struct {
 
 	peerLock sync.Mutex
 	peers    map[string]p2p.Peer
-	store    *Store
+	store    *store.Store
 	quitCh   chan struct{}
 }
 
 func NewFileServer(opts FileServerOpts) *FileServer {
-	storeOpts := StoreOpts{
+	storeOpts := store.StoreOpts{
 		Root:              opts.StorageRoot,
 		PathTransformFunc: opts.PathTransformFunc,
 	}
 
 	return &FileServer{
 		FileServerOpts: opts,
-		store:          NewStore(storeOpts),
+		store:          store.NewStore(storeOpts),
 		quitCh:         make(chan struct{}),
 		peers:          make(map[string]p2p.Peer),
 	}
@@ -59,7 +61,7 @@ type MessageGetFile struct {
 }
 
 // First try to read file locally, it does not exist on the server locally,
-// it broadcast a get file message to all its peer and read the encrypt file content 
+// it broadcast a get file message to all its peer and read the encrypt file content
 // from the first peer and write it to the local disk with decrypt content.
 func (fs *FileServer) Get(key string) (io.Reader, error) {
 	if fs.store.Has(key) {
@@ -71,7 +73,7 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := Message{
 		Payload: MessageGetFile{
-			Key: hashKey(key),
+			Key: crypto.HashKey(key),
 		},
 	}
 
@@ -120,7 +122,7 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 
 	msg := Message{
 		Payload: MessageStoreFile{
-			Key:  hashKey(key),
+			Key:  crypto.HashKey(key),
 			Size: size + 16,
 		},
 	}
@@ -139,7 +141,7 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 	// MultiWriter writes the same data to every peer at the same time.
 	mw := io.MultiWriter(peers...)
 	mw.Write([]byte{p2p.IncomingStream})
-	_, err = copyEncrypt(fs.EncryptionKey, fileBuf, mw)
+	_, err = crypto.CopyEncrypt(fs.EncryptionKey, fileBuf, mw)
 	if err != nil {
 		return err
 	}
@@ -158,6 +160,11 @@ func (fs *FileServer) Start() error {
 	fs.loop()
 
 	return nil
+}
+
+// Delete a file from disk
+func (fs *FileServer) Delete(key string) error {
+	return fs.store.Delete(key)
 }
 
 // Stop the file server

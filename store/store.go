@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"crypto/sha1"
@@ -10,6 +10,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
 )
 
 const DefaultRootFolderName = "CYLNetwork"
@@ -55,7 +57,7 @@ func (p Pathkey) FullPath() string {
 	return fmt.Sprintf("%s/%s", p.PathName, p.Filename)
 }
 
-// Return the first pathname of the path 
+// Return the first pathname of the path
 func (p Pathkey) FirstPathName() string {
 	paths := strings.Split(p.PathName, "/")
 
@@ -139,18 +141,18 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
-// Decrypt the reader content and write it to the file 
+// Decrypt the reader content and write it to the file
 func (s *Store) WriteDecrypt(encryptionKey []byte, key string, r io.Reader) (int64, error) {
 	f, err := s.openFileForWriting(key)
 	if err != nil {
 		return 0, err
 	}
 
-	n, err := copyDecrypt(encryptionKey, r, f)
+	n, err := crypto.CopyDecrypt(encryptionKey, r, f)
 	return int64(n), err
 }
 
-//Create the file path for a file to be writen
+// Create the file path for a file to be writen
 func (s *Store) openFileForWriting(key string) (*os.File, error) {
 	pathkey := s.PathTransformFunc(key)
 	root := fmt.Sprintf("%s/%s", s.Root, pathkey.PathName)

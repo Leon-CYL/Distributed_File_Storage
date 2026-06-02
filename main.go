@@ -8,9 +8,13 @@ import (
 	"time"
 
 	"github.com/Leon-CYL/Distributed_File_Storage/p2p"
+	"github.com/Leon-CYL/Distributed_File_Storage/server"
+	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
+	"github.com/Leon-CYL/Distributed_File_Storage/store"
+	
 )
 
-func newServer(listenAddr string, nodes ...string) *FileServer {
+func newServer(listenAddr string, nodes ...string) *server.FileServer {
 	tcpTransportOpts := p2p.TCPTransportOpts{
 		ListenAddr:    listenAddr,
 		HandshakeFunc: p2p.NOPHandshake,
@@ -19,15 +23,15 @@ func newServer(listenAddr string, nodes ...string) *FileServer {
 
 	tcp := p2p.NewTCPTransport(tcpTransportOpts)
 
-	fileServerOpts := FileServerOpts{
-		EncryptionKey:     newEncryptionKey(),
+	fileServerOpts := server.FileServerOpts{
+		EncryptionKey:     crypto.NewEncryptionKey(),
 		StorageRoot:       listenAddr + "_network",
-		PathTransformFunc: CASPathTransformFunc,
+		PathTransformFunc: store.CASPathTransformFunc,
 		Transport:         tcp,
 		BootstrapNodes:    nodes,
 	}
 
-	fs := NewFileServer(fileServerOpts)
+	fs := server.NewFileServer(fileServerOpts)
 
 	tcp.OnPeer = fs.OnPeer
 
@@ -64,7 +68,7 @@ func main() {
 
 		time.Sleep(time.Millisecond * 5)
 
-		if err := s3.store.Delete(key); err != nil {
+		if err := s3.Delete(key); err != nil {
 			log.Fatal(err)
 		}
 
