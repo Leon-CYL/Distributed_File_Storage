@@ -58,6 +58,9 @@ type MessageGetFile struct {
 	Key string
 }
 
+// First try to read file locally, it does not exist on the server locally,
+// it broadcast a get file message to all its peer and read the encrypt file content 
+// from the first peer and write it to the local disk with decrypt content.
 func (fs *FileServer) Get(key string) (io.Reader, error) {
 	if fs.store.Has(key) {
 		_, r, err := fs.store.Read(key)
@@ -99,6 +102,12 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 	return r, err
 }
 
+// Store writes the file to the local disk first, while also keeping a copy
+// of the file data in memory. After the local write succeeds, it broadcasts
+// a metadata message to all peers so they know a file is about to be sent.
+// Then it creates one writer that points to all peer connections, marks the
+// next data as an incoming file stream, encrypts the buffered file content,
+// and sends the encrypted file bytes to every peer.
 func (fs *FileServer) Store(key string, r io.Reader) error {
 
 	fileBuf := new(bytes.Buffer)
@@ -127,6 +136,7 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 		peers = append(peers, peer)
 	}
 
+	// MultiWriter writes the same data to every peer at the same time.
 	mw := io.MultiWriter(peers...)
 	mw.Write([]byte{p2p.IncomingStream})
 	_, err = copyEncrypt(fs.EncryptionKey, fileBuf, mw)
@@ -134,11 +144,10 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 		return err
 	}
 
-	// fmt.Printf("[%s] Receive and Written (%d) bytes to peer\n", fs.Transport.Addr(), n)
-
 	return nil
 }
 
+// Start File server and Listen for request from client/peer
 func (fs *FileServer) Start() error {
 	fmt.Printf("Starting file server[%s]...\n", fs.Transport.Addr())
 	if err := fs.Transport.AcceptAndListen(); err != nil {
@@ -151,10 +160,12 @@ func (fs *FileServer) Start() error {
 	return nil
 }
 
+// Stop the file server
 func (fs *FileServer) Stop() {
 	close(fs.quitCh)
 }
 
+// Add a new peer to the P2P file system and notified this server that a new peer joined
 func (fs *FileServer) OnPeer(p p2p.Peer) error {
 	fs.peerLock.Lock()
 	defer fs.peerLock.Unlock()
@@ -165,6 +176,43 @@ func (fs *FileServer) OnPeer(p p2p.Peer) error {
 	return nil
 }
 
+// Connect to all the peer server
+func (fs *FileServer) bootstrapNetwork() error {
+	for _, addr := range fs.BootstrapNodes {
+		if len(addr) == 0 {
+			continue
+		}
+
+		go func(addr string) {
+			fmt.Printf("[%s] attemping to connect with remote node: %s\n", fs.Transport.Addr(), addr)
+			if err := fs.Transport.Dial(addr); err != nil {
+				log.Printf("Error dialing bootstrap node: %s\n", err)
+			}
+		}(addr)
+	}
+
+	return nil
+}
+
+// Send a message to all peers
+func (fs *FileServer) broadcast(msg *Message) error {
+	buf := new(bytes.Buffer)
+
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+		return err
+	}
+
+	for _, peer := range fs.peers {
+		peer.Send([]byte{p2p.IncomingMessage})
+		if err := peer.Send(buf.Bytes()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Netowrk listen loop that accept peer read file messgae and peer write file message
 func (fs *FileServer) loop() {
 	defer func() {
 		fmt.Println("File server shutting down due to error or user quit...")
@@ -189,6 +237,7 @@ func (fs *FileServer) loop() {
 	}
 }
 
+// Helper function for handling peer massage
 func (fs *FileServer) handleMessage(from string, msg *Message) error {
 	switch v := msg.Payload.(type) {
 	case MessageStoreFile:
@@ -199,6 +248,12 @@ func (fs *FileServer) handleMessage(from string, msg *Message) error {
 
 	return nil
 }
+
+// handleMessageGetFile handles a peer's request to get a file.
+// It first checks whether the requested file exists locally. If it exists,
+// the server reads the file, finds the peer that requested it, sends a stream
+// marker and the file size, then copies the file content over the network
+// to that peer.
 
 func (fs *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
 	if !fs.store.Has(msg.Key) {
@@ -236,6 +291,7 @@ func (fs *FileServer) handleMessageGetFile(from string, msg MessageGetFile) erro
 	return nil
 }
 
+// hadnleMessageStoreFile hanlde the peer request for writing a file to its local disk
 func (fs *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) error {
 	peer, ok := fs.peers[from]
 	if !ok {
@@ -250,40 +306,6 @@ func (fs *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) 
 	fmt.Printf("[%s] written %d bytes to disk\n", fs.Transport.Addr(), n)
 
 	peer.CloseStream()
-
-	return nil
-}
-
-func (fs *FileServer) bootstrapNetwork() error {
-	for _, addr := range fs.BootstrapNodes {
-		if len(addr) == 0 {
-			continue
-		}
-
-		go func(addr string) {
-			fmt.Printf("[%s] attemping to connect with remote node: %s\n", fs.Transport.Addr(), addr)
-			if err := fs.Transport.Dial(addr); err != nil {
-				log.Printf("Error dialing bootstrap node: %s\n", err)
-			}
-		}(addr)
-	}
-
-	return nil
-}
-
-func (fs *FileServer) broadcast(msg *Message) error {
-	buf := new(bytes.Buffer)
-
-	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
-		return err
-	}
-
-	for _, peer := range fs.peers {
-		peer.Send([]byte{p2p.IncomingMessage})
-		if err := peer.Send(buf.Bytes()); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }

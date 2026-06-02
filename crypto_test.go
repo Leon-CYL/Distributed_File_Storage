@@ -1,8 +1,9 @@
-package main
+package test
 
 import (
 	"bytes"
 	"testing"
+	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
 )
 
 func TestCopyEncryptDecrypt(t *testing.T) {

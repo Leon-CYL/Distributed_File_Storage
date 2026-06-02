@@ -14,6 +14,21 @@ import (
 
 const DefaultRootFolderName = "CYLNetwork"
 
+type Pathkey struct {
+	PathName string
+	Filename string
+}
+
+type PathTransformFunc func(string) Pathkey
+
+var DefaultTransformFunc = func(key string) Pathkey {
+	return Pathkey{
+		PathName: key,
+		Filename: key,
+	}
+}
+
+// Hash `key` and convert it into a path for the file storage
 func CASPathTransformFunc(key string) Pathkey {
 	hash := sha1.Sum([]byte(key))
 	hashStr := hex.EncodeToString(hash[:])
@@ -35,24 +50,12 @@ func CASPathTransformFunc(key string) Pathkey {
 	}
 }
 
-type PathTransformFunc func(string) Pathkey
-
-var DefaultTransformFunc = func(key string) Pathkey {
-	return Pathkey{
-		PathName: key,
-		Filename: key,
-	}
-}
-
-type Pathkey struct {
-	PathName string
-	Filename string
-}
-
+// Return the path of the file
 func (p Pathkey) FullPath() string {
 	return fmt.Sprintf("%s/%s", p.PathName, p.Filename)
 }
 
+// Return the first pathname of the path 
 func (p Pathkey) FirstPathName() string {
 	paths := strings.Split(p.PathName, "/")
 
@@ -86,10 +89,12 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
+// Remove all the files under Root
 func (s *Store) Clear() error {
 	return os.RemoveAll(s.Root)
 }
 
+// Check if a file exist in the disk
 func (s *Store) Has(key string) bool {
 	pathkey := s.PathTransformFunc(key)
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
@@ -97,6 +102,7 @@ func (s *Store) Has(key string) bool {
 	return !errors.Is(err, fs.ErrNotExist)
 }
 
+// Delete a file from the disk
 func (s *Store) Delete(key string) error {
 	pathkey := s.PathTransformFunc(key)
 	deletePath := fmt.Sprintf("%s/%s", s.Root, pathkey.FirstPathName())
@@ -106,10 +112,12 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(deletePath)
 }
 
+// Return a io reader for a file to be read
 func (s *Store) Read(key string) (int64, io.Reader, error) {
 	return s.readStream(key)
 }
 
+// Open a file using `key` and return the reader
 func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	pathkey := s.PathTransformFunc(key)
 	fullPath := fmt.Sprintf("%s/%s", s.Root, pathkey.FullPath())
@@ -126,10 +134,12 @@ func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	return fi.Size(), file, nil
 }
 
+// Write a file to the disk
 func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
+// Decrypt the reader content and write it to the file 
 func (s *Store) WriteDecrypt(encryptionKey []byte, key string, r io.Reader) (int64, error) {
 	f, err := s.openFileForWriting(key)
 	if err != nil {
@@ -140,6 +150,7 @@ func (s *Store) WriteDecrypt(encryptionKey []byte, key string, r io.Reader) (int
 	return int64(n), err
 }
 
+//Create the file path for a file to be writen
 func (s *Store) openFileForWriting(key string) (*os.File, error) {
 	pathkey := s.PathTransformFunc(key)
 	root := fmt.Sprintf("%s/%s", s.Root, pathkey.PathName)
@@ -152,6 +163,7 @@ func (s *Store) openFileForWriting(key string) (*os.File, error) {
 	return os.Create(fullPath)
 }
 
+// Write the content from reader to the file on the disk
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	f, err := s.openFileForWriting(key)
 	if err != nil {
