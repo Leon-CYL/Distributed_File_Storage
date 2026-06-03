@@ -1,8 +1,14 @@
+.PHONY: build run test clean
+
 build:
-	@go build -o bin/fs
+	@mkdir -p bin
+	@go build -o bin/fs .
 
 run: build
 	@./bin/fs
 
 test:
-	@go test ./...
+	@go test ./test
+
+clean:
+	@rm -rf bin
