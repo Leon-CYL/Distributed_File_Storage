@@ -1,13 +1,14 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/Leon-CYL/Distributed_File_Storage/api"
-	"github.com/Leon-CYL/Distributed_File_Storage/crypto"
 	"github.com/Leon-CYL/Distributed_File_Storage/p2p"
 	"github.com/Leon-CYL/Distributed_File_Storage/server"
 	"github.com/Leon-CYL/Distributed_File_Storage/store"
@@ -50,7 +51,7 @@ func main() {
 	tcp := p2p.NewTCPTransport(tcpTransportOpts)
 
 	fileServerOpts := server.FileServerOpts{
-		EncryptionKey:     crypto.NewEncryptionKey(),
+		EncryptionKey:     getEncryptionKey(),
 		StorageRoot:       *storageRoot,
 		PathTransformFunc: store.CASPathTransformFunc,
 		Transport:         tcp,
@@ -72,4 +73,22 @@ func main() {
 	if err := httpServer.Start(); err != nil {
 		log.Fatalf("http server error: %v", err)
 	}
+}
+
+func getEncryptionKey() []byte {
+	keyHex := os.Getenv("DFS_ENCRYPTION_KEY")
+	if keyHex == "" {
+		log.Fatal("DFS_ENCRYPTION_KEY environment variable is required")
+	}
+
+	key, err := hex.DecodeString(keyHex)
+	if err != nil {
+		log.Fatalf("invalid DFS_ENCRYPTION_KEY: must be hex encoded: %v", err)
+	}
+
+	if len(key) != 32 {
+		log.Fatalf("invalid DFS_ENCRYPTION_KEY: expected 32 bytes, got %d bytes", len(key))
+	}
+
+	return key
 }

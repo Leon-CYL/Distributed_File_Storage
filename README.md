@@ -21,3 +21,7 @@ GET latency (20 requests, network):
 - p50: 502 ms
 - p95: 509 ms
 - p99: 509 ms
+
+## Generate share encryption key:
+> openssl rand -hex 32
+> export DFS_ENCRYPTION_KEY=9d1c0b4a8e4f6c8f7e2a1b9c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70

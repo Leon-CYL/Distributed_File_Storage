@@ -22,13 +22,16 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Build binary
+      - name: Build binaries
         run: |
           mkdir -p bin
-          go build -o bin/fs .
+          go build -o bin/node ./cmd/node
+          go build -o bin/client ./cmd/client
 
-      - name: Upload binary artifact
+      - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
           name: p2p-file-system-linux
-          path: bin/fs
+          path: |
+            bin/node
+            bin/client
