@@ -64,8 +64,10 @@ type MessageGetFile struct {
 // it broadcast a get file message to all its peer and read the encrypt file content
 // from the first peer and write it to the local disk with decrypt content.
 func (fs *FileServer) Get(key string) (io.Reader, error) {
-	if fs.store.Has(key) {
-		_, r, err := fs.store.Read(key)
+	storageKey := crypto.HashKey(key)
+
+	if fs.store.Has(storageKey) {
+		_, r, err := fs.store.Read(storageKey)
 		return r, err
 	}
 
@@ -73,7 +75,7 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := Message{
 		Payload: MessageGetFile{
-			Key: crypto.HashKey(key),
+			Key: storageKey,
 		},
 	}
 
@@ -84,23 +86,25 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 	time.Sleep(time.Millisecond * 500)
 
 	for _, peer := range fs.peers {
-		// First read the file size from the peer so it will not block the stream
 		var fileSize int64
-		binary.Read(peer, binary.LittleEndian, &fileSize)
 
-		// Then read the file from the peer
-		n, err := fs.store.WriteDecrypt(fs.EncryptionKey, key, io.LimitReader(peer, fileSize))
+		if err := binary.Read(peer, binary.LittleEndian, &fileSize); err != nil {
+			continue
+		}
+
+		n, err := fs.store.WriteDecrypt(fs.EncryptionKey, storageKey, io.LimitReader(peer, fileSize))
 		if err != nil {
 			return nil, err
 		}
 
-		fmt.Printf("[%s] received (%d) bytes over network from [%s]: \n", fs.Transport.Addr(), n, peer.RemoteAddr())
+		fmt.Printf("[%s] received (%d) bytes over network from [%s]\n", fs.Transport.Addr(), n, peer.RemoteAddr())
 
 		peer.CloseStream()
 
+		break
 	}
 
-	_, r, err := fs.store.Read(key)
+	_, r, err := fs.store.Read(storageKey)
 	return r, err
 }
 
@@ -111,21 +115,23 @@ func (fs *FileServer) Get(key string) (io.Reader, error) {
 // next data as an incoming file stream, encrypts the buffered file content,
 // and sends the encrypted file bytes to every peer.
 func (fs *FileServer) Store(key string, r io.Reader) error {
+	storageKey := crypto.HashKey(key)
 
 	fileBuf := new(bytes.Buffer)
 	tee := io.TeeReader(r, fileBuf)
 
-	size, err := fs.store.Write(key, tee)
+	size, err := fs.store.Write(storageKey, tee)
 	if err != nil {
 		return err
 	}
 
 	msg := Message{
 		Payload: MessageStoreFile{
-			Key:  crypto.HashKey(key),
-			Size: size + 16,
+			Key:  storageKey,
+			Size: size + 16, // encrypted stream includes 16-byte IV
 		},
 	}
+
 	if err := fs.broadcast(&msg); err != nil {
 		return err
 	}
@@ -133,14 +139,20 @@ func (fs *FileServer) Store(key string, r io.Reader) error {
 	time.Sleep(time.Millisecond * 5)
 
 	peers := []io.Writer{}
-
 	for _, peer := range fs.peers {
 		peers = append(peers, peer)
 	}
 
-	// MultiWriter writes the same data to every peer at the same time.
+	if len(peers) == 0 {
+		return nil
+	}
+
 	mw := io.MultiWriter(peers...)
-	mw.Write([]byte{p2p.IncomingStream})
+
+	if _, err := mw.Write([]byte{p2p.IncomingStream}); err != nil {
+		return err
+	}
+
 	_, err = crypto.CopyEncrypt(fs.EncryptionKey, fileBuf, mw)
 	if err != nil {
 		return err
@@ -164,7 +176,8 @@ func (fs *FileServer) Start() error {
 
 // Delete a file from disk
 func (fs *FileServer) Delete(key string) error {
-	return fs.store.Delete(key)
+	storageKey := crypto.HashKey(key)
+	return fs.store.Delete(storageKey)
 }
 
 // Stop the file server
@@ -275,25 +288,30 @@ func (fs *FileServer) handleMessageGetFile(from string, msg MessageGetFile) erro
 	}
 
 	if rc, ok := r.(io.ReadCloser); ok {
-		fmt.Printf("[%s] closing file(%s) after serving over the network\n", fs.Transport.Addr(), msg.Key)
 		defer rc.Close()
 	}
 
 	peer, ok := fs.peers[from]
-
 	if !ok {
 		return fmt.Errorf("peer (%s) could not be found in peer map", from)
 	}
 
-	peer.Send([]byte{p2p.IncomingStream})
-	binary.Write(peer, binary.LittleEndian, fileSize)
+	if err := peer.Send([]byte{p2p.IncomingStream}); err != nil {
+		return err
+	}
 
-	n, err := io.Copy(peer, r)
+	encryptedSize := fileSize + 16
+
+	if err := binary.Write(peer, binary.LittleEndian, encryptedSize); err != nil {
+		return err
+	}
+
+	n, err := crypto.CopyEncrypt(fs.EncryptionKey, r, peer)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("[%s] writte (%d) bytes over network to %s\n", fs.Transport.Addr(), n, from)
+	fmt.Printf("[%s] wrote (%d) encrypted bytes over network to %s\n", fs.Transport.Addr(), n, from)
 
 	return nil
 }
@@ -305,12 +323,12 @@ func (fs *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) 
 		return fmt.Errorf("peer (%s) could not be found in peer map", from)
 	}
 
-	n, err := fs.store.Write(msg.Key, io.LimitReader(peer, msg.Size))
+	n, err := fs.store.WriteDecrypt(fs.EncryptionKey, msg.Key, io.LimitReader(peer, msg.Size))
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("[%s] written %d bytes to disk\n", fs.Transport.Addr(), n)
+	fmt.Printf("[%s] written %d decrypted bytes to disk\n", fs.Transport.Addr(), n)
 
 	peer.CloseStream()
 
