@@ -1,0 +1,109 @@
+services:
+  node1:
+    build: .
+    container_name: dfs-node1
+    environment:
+      - DFS_ENCRYPTION_KEY=${DFS_ENCRYPTION_KEY}
+    command: >
+      /app/node
+      --host 0.0.0.0
+      --p2p-addr 5001
+      --http-addr 8001
+      --storage /data/node1
+    ports:
+      - "8001:8001"
+    volumes:
+      - node1_data:/data/node1
+
+  node2:
+    build: .
+    container_name: dfs-node2
+    depends_on:
+      - node1
+    environment:
+      - DFS_ENCRYPTION_KEY=${DFS_ENCRYPTION_KEY}
+    command: >
+      sh -c "sleep 2 &&
+      /app/node
+      --host 0.0.0.0
+      --p2p-addr 5001
+      --http-addr 8001
+      --storage /data/node2
+      --peers node1:5001"
+    ports:
+      - "8002:8001"
+    volumes:
+      - node2_data:/data/node2
+
+  node3:
+    build: .
+    container_name: dfs-node3
+    depends_on:
+      - node1
+      - node2
+    environment:
+      - DFS_ENCRYPTION_KEY=${DFS_ENCRYPTION_KEY}
+    command: >
+      sh -c "sleep 4 &&
+      /app/node
+      --host 0.0.0.0
+      --p2p-addr 5001
+      --http-addr 8001
+      --storage /data/node3
+      --peers node1:5001,node2:5001"
+    ports:
+      - "8003:8001"
+    volumes:
+      - node3_data:/data/node3
+
+  node4:
+    build: .
+    container_name: dfs-node4
+    depends_on:
+      - node1
+      - node2
+      - node3
+    environment:
+      - DFS_ENCRYPTION_KEY=${DFS_ENCRYPTION_KEY}
+    command: >
+      sh -c "sleep 6 &&
+      /app/node
+      --host 0.0.0.0
+      --p2p-addr 5001
+      --http-addr 8001
+      --storage /data/node4
+      --peers node1:5001,node2:5001,node3:5001"
+    ports:
+      - "8004:8001"
+    volumes:
+      - node4_data:/data/node4
+
+  node5:
+    build: .
+    container_name: dfs-node5
+    depends_on:
+      - node1
+      - node2
+      - node3
+      - node4
+    environment:
+      - DFS_ENCRYPTION_KEY=${DFS_ENCRYPTION_KEY}
+    command: >
+      sh -c "sleep 8 &&
+      /app/node
+      --host 0.0.0.0
+      --p2p-addr 5001
+      --http-addr 8001
+      --storage /data/node5
+      --peers node1:5001,node2:5001,node3:5001,node4:5001"
+    ports:
+      - "8005:8001"
+    volumes:
+      - node5_data:/data/node5
+
+volumes:
+  node1_data:
+  node2_data:
+  node3_data:
+  node4_data:
+  node5_data:

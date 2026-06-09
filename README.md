@@ -24,4 +24,4 @@ GET latency (20 requests, network):
 
 ## Generate share encryption key:
 > openssl rand -hex 32
-> export DFS_ENCRYPTION_KEY=7d98b4aea9958cb64dd22c05a09a4c487390ce950e90ba1b5526a1d995e92e17
+> export DFS_ENCRYPTION_KEY=
