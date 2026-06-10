@@ -1,0 +1,23 @@
+# AWS / SSH private keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+aws.md
+
+# Local build output
+bin/
+
+# Local node storage
+node1/
+node2/
+node3/
+node4/
+node5/
+
+# Benchmark output
+benchdata/
+downloaded-*.txt
+
+# macOS
+.DS_Store

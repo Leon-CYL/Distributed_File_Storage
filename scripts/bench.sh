@@ -2,9 +2,13 @@
 
 set -e
 
-ADDR_PUT="http://localhost:8001"
-ADDR_GET_LOCAL="http://localhost:8001"
-ADDR_GET_REMOTE="http://localhost:8005"
+# ADDR_PUT="http://localhost:8001"
+# ADDR_GET_LOCAL="http://localhost:8001"
+# ADDR_GET_REMOTE="http://localhost:8005"
+
+ADDR_PUT="http://52.53.177.170:8001"
+ADDR_GET_LOCAL="http://52.53.177.170:8001"
+ADDR_GET_REMOTE="http://54.183.234.0:8001"
 
 REQUESTS=20
 
