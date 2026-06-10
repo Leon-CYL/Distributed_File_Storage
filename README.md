@@ -53,7 +53,3 @@ Environment:
 | GET | 1 MB | node5 | 1516.3 ms | 564 ms | 4877 ms | 4877 ms |
 | GET | 10 MB | node1 | 6846.35 ms | 5348 ms | 14402 ms | 14402 ms |
 | GET | 10 MB | node5 | 5539.4 ms | 4676 ms | 9995 ms | 9995 ms |
-
-## Generate share encryption key:
-> openssl rand -hex 32<br>
-> export DFS_ENCRYPTION_KEY= <br>
